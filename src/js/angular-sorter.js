@@ -5,39 +5,43 @@
         .directive('angularSorter', ['$timeout', '$compile', '$parse', function ($timeout, $compile, $parse) {
             return {
                 restrict: 'A',
-                require: 'ngModel',
-                scope: {angularSorter: '=', options: '='},
-                template: '<div class=btn-group>' +
-                '<button ng-repeat="item in items" ng-show="item.selected" class="btn btn-default btn-xs" ng-click="set(item)">' +
-                '<i class="fa fa-fw {{item.reversed && \'fa-sort-alpha-desc\' || \'fa-sort-alpha-asc\'}}"></i> Ordered by {{item.label||item.field}}' +
-                '</button>' +
-                '<button class="btn btn-default btn-xs dropdown-toggle" data-toggle=dropdown><span class=caret></span></button>' +
-                '<ul class="dropdown-menu pull-right">' +
-                '<li ng-repeat="item in items"><a href="" ng-click="set(item)"><i class="fa fa-fw {{item.selected && \'fa-check\' || \'\'}}"></i> Ordered by {{item.label||item.field}}</a></li>' +
-                '</ul>' +
-                '</div>',
-                link: function ($scope, element, attrs, ngModel) {
-                    $scope.redraw = function () {
-                        $scope.items = $scope.angularSorter || [{field: 'updated_at', label: 'Last updated'}];
+                replace: true,
+                priority: 10000,
+                compile: function (element, attrs) {
+                    var repeat = attrs.ngRepeat;
+                    if (!repeat) {
+                        throw new Error("This directive only works with ng-repeat");
+                    }
 
-                        if (!_.findWhere($scope.items, {selected: true})) {
-                            $scope.set($scope.items[0]);
+                    var expression = /(\w+)\s+in\s+(\w+)/.exec(repeat);
+                    var item = expression[1];
+                    var model = expression[2];
+
+                    expression = /orderBy\s*:\s*['"](.*?)['"]/.exec(repeat);
+                    var priority = expression[2] || 'priority';
+
+                    element.attr('data-unique-id', '{{' + item + '[' + item + '.getPK()]}}');
+
+                    return {
+                        post: function ($scope, element, attrs) {
+                            $timeout(function () {
+                                element.parent().sortable({
+                                    stop: function (event, ui) {
+                                        ui.item.siblings('[ng-repeat]').addBack().each(function (index, item) {
+                                            if ($scope[model]) {
+                                                for (var i = 0; i < $scope[model].length; i++) {
+                                                    if ($scope[model][i].getPKValue() == $(item).data('unique-id')) {
+                                                        $scope[model][i].set(priority, index + 1);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            });
                         }
-                    };
-
-                    $scope.set = function (item) {
-                        angular.forEach($scope.items, function (v, k) {
-                            if (v === item && v.selected) {
-                                v.reversed = !v.reversed;
-                            } else {
-                                v.selected = v === item;
-                            }
-                        });
-
-                        ngModel.$setViewValue(item);
-                    };
-
-                    ngModel.$render = $scope.redraw;
+                    }
                 }
             };
         }])
